@@ -91,7 +91,7 @@ def predict_stock_price(model, scaled_data, training_data_len, scaler):
 
 # Main function for the Streamlit app
 def main():
-    st.set_page_config(page_title="Stock Price Prediction", layout="wide")
+    st.set_page_config(page_title="Stock Price Predictor", layout="wide")
     
     st.markdown("""
         <style>
@@ -156,22 +156,22 @@ def main():
         test = data[training_data_len:]
         test['Predictions'] = predictions
 
-        # Displaying stock summary
-        st.subheader(f"Stock Information: {stock_symbol}")
-        st.write(f"Start Date: {data.index.min()}")
-        st.write(f"End Date: {data.index.max()}")
-        st.write(f"Current Price: {data['Close'][-1]:.2f}")
-        st.write(f"Price Change (1-day): {((data['Close'][-1] - data['Close'][-2]) / data['Close'][-2]) * 100:.2f}%")
-
-        # Plotting graphs
         fig, ax = plt.subplots(figsize=(14, 8))
         ax.plot(train['Close'], label='Training Data', color='blue', alpha=0.6)
         ax.plot(test['Close'], label='Test Data', color='green', alpha=0.6)
         ax.plot(test['Predictions'], label='Predicted Data', color='red', linestyle='--', alpha=0.8)
 
-        ax.set_title(f'{stock_symbol} Stock Price Prediction', fontsize=16)
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Price (USD)')
+        ax.set_title(f'{stock_symbol} Stock Price Prediction', fontsize=20, color='white')
+        ax.set_xlabel('Date', fontsize=14, color='white')
+        ax.set_ylabel('Price', fontsize=14, color='white')
         ax.legend()
 
+        ax.set_facecolor('#2c3e50')
+        fig.patch.set_facecolor('#2c3e50')
+
         st.pyplot(fig)
+    else:
+        st.markdown('<div class="stock-card"><h4>Stock Symbol Required</h4><p>Please enter a stock symbol to predict.</p></div>', unsafe_allow_html=True)
+
+if __name__ == '__main__':
+    main()
