@@ -125,6 +125,10 @@ def main():
             color: #fff;
             font-size: 24px;
         }
+        .progress-bar {
+            width: 80%;
+            margin: 30px auto;
+        }
         </style>
     """, unsafe_allow_html=True)
     
@@ -157,17 +161,17 @@ def main():
         test['Predictions'] = predictions
 
         fig, ax = plt.subplots(figsize=(14, 8))
-        ax.plot(train['Close'], label='Training Data', color='blue', alpha=0.6)
-        ax.plot(test['Close'], label='Test Data', color='green', alpha=0.6)
-        ax.plot(test['Predictions'], label='Predicted Data', color='red', linestyle='--', alpha=0.8)
+        ax.plot(train['Close'], label='Training Data', color='#1f77b4', alpha=0.8)
+        ax.plot(test['Close'], label='Test Data', color='#2ca02c', alpha=0.6)
+        ax.plot(test['Predictions'], label='Predicted Data', color='#ff7f0e', linestyle='--', alpha=0.9)
 
         ax.set_title(f'{stock_symbol} Stock Price Prediction', fontsize=20, color='white')
         ax.set_xlabel('Date', fontsize=14, color='white')
         ax.set_ylabel('Price', fontsize=14, color='white')
         ax.legend()
 
-        ax.set_facecolor('#2c3e50')
-        fig.patch.set_facecolor('#2c3e50')
+        ax.set_facecolor('#1a1a1a')  # Dark background for the plot
+        fig.patch.set_facecolor('#1a1a1a')  # Dark background for the entire figure
 
         st.pyplot(fig)
     else:
