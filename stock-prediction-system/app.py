@@ -1,12 +1,11 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import plotly.graph_objs as go
+import matplotlib.pyplot as plt
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
-import time
 
 # Function to fetch and preprocess stock data
 def get_data(stock_symbol):
@@ -76,73 +75,105 @@ def predict_stock_price(model, scaled_data, training_data_len, scaler):
 
     X_test = np.array(X_test)
 
+    if len(X_test.shape) == 3:
+        X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
+
     predictions = model.predict(X_test)
-    num_features = scaled_data.shape[1]
+    
+    # Ensure predictions match the scaler's input dimensions
+    num_features = scaled_data.shape[1]  # Number of features in scaled_data
     padding = np.zeros((predictions.shape[0], num_features - 1))
     predictions_full = np.hstack((predictions, padding))
 
-    predictions = scaler.inverse_transform(predictions_full)[:, 0]
+    predictions = scaler.inverse_transform(predictions_full)[:, 0]  # Only keep the predicted Close prices
+
     return predictions
 
-# Main Application
+# Main function for the Streamlit app
 def main():
-    # Custom CSS
+    st.set_page_config(page_title="Stock Price Predictor", layout="wide")
+    
     st.markdown("""
-    <style>
-    body { background: linear-gradient(135deg, #1a2b3c, #273542); color: white; font-family: 'Roboto', sans-serif; }
-    .header-container { text-align: center; background: linear-gradient(90deg, #4b6cb7, #182848); padding: 20px; border-radius: 15px; }
-    .header-container h1 { color: white; font-size: 3rem; margin-bottom: 5px; }
-    .header-container p { font-size: 1.2rem; color: #ddd; }
-    .card { background-color: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 15px; margin-bottom: 20px; }
-    </style>
+        <style>
+        body {
+            background: linear-gradient(135deg, #ff5f6d, #ffc3a0);
+            font-family: 'Arial', sans-serif;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            font-size: 40px;
+            margin-top: 50px;
+        }
+        .input-box {
+            display: flex;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        .stock-card {
+            display: flex;
+            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 30px;
+            border-radius: 15px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+        .stock-card h4 {
+            color: #fff;
+            font-size: 24px;
+        }
+        </style>
     """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="header">Stock Price Prediction using LSTM</div>', unsafe_allow_html=True)
 
-    # Header
-    st.markdown("""
-    <div class="header-container">
-        <h1>🚀 Stock Price Predictor</h1>
-        <p>Analyze & Predict Market Trends with AI-Powered Insights</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Input
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    stock_symbol = st.text_input("🔍 Enter Stock Symbol", "AAPL", help="Enter a valid stock ticker (e.g., AAPL, MSFT, TSLA)")
-    st.markdown("</div>", unsafe_allow_html=True)
-
+    # Dropdown for selecting stock symbol
+    stock_options = ['AAPL', 'GOOG', 'AMZN', 'MSFT', 'TSLA', 'NFLX', 'META']
+    stock_symbol = st.selectbox('Select Stock Symbol:', stock_options)
+    
     if stock_symbol:
-        with st.spinner("Fetching and processing data..."):
-            time.sleep(2)  # Simulating loading
+        st.markdown("""
+            <div class="stock-card">
+            <h4>Processing Stock Data...</h4>
+            <p>Fetching historical data and training the model...</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-        try:
-            data = get_data(stock_symbol)
-            scaled_data, X_train, y_train, training_data_len, scaler = prepare_data(data)
+        progress = st.progress(0)
+        for i in range(100):
+            progress.progress(i + 1)
 
-            model = build_model(X_train)
-            model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
+        data = get_data(stock_symbol)
+        scaled_data, X_train, y_train, training_data_len, scaler = prepare_data(data)
 
-            predictions = predict_stock_price(model, scaled_data, training_data_len, scaler)
+        model = build_model(X_train)
+        model.fit(X_train, y_train, epochs=10, batch_size=32)
 
-            train = data[:training_data_len]
-            test = data[training_data_len:]
-            test['Predictions'] = predictions
+        predictions = predict_stock_price(model, scaled_data, training_data_len, scaler)
 
-            # Plot
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=train.index, y=train['Close'], name='Training Data'))
-            fig.add_trace(go.Scatter(x=test.index, y=test['Close'], name='Actual Data'))
-            fig.add_trace(go.Scatter(x=test.index, y=test['Predictions'], name='Predictions'))
-            fig.update_layout(title=f"{stock_symbol} Stock Price Prediction", template="plotly_dark")
-            st.plotly_chart(fig)
+        train = data[:training_data_len]
+        test = data[training_data_len:]
+        test['Predictions'] = predictions
 
-            # Metrics
-            mse = np.mean((test['Close'] - test['Predictions'])**2)
-            mae = np.mean(np.abs(test['Close'] - test['Predictions']))
-            st.metric("📉 Mean Squared Error", f"{mse:.2f}")
-            st.metric("📊 Mean Absolute Error", f"{mae:.2f}")
+        fig, ax = plt.subplots(figsize=(14, 8))
+        ax.plot(train['Close'], label='Training Data', color='blue', alpha=0.6)
+        ax.plot(test['Close'], label='Test Data', color='green', alpha=0.6)
+        ax.plot(test['Predictions'], label='Predicted Data', color='red', linestyle='--', alpha=0.8)
 
-        except Exception as e:
-            st.error(f"Error: {e}")
+        ax.set_title(f'{stock_symbol} Stock Price Prediction', fontsize=20, color='white')
+        ax.set_xlabel('Date', fontsize=14, color='white')
+        ax.set_ylabel('Price', fontsize=14, color='white')
+        ax.legend()
 
-if __name__ == "__main__":
+        ax.set_facecolor('#2c3e50')
+        fig.patch.set_facecolor('#2c3e50')
+
+        st.pyplot(fig)
+    else:
+        st.markdown('<div class="stock-card"><h4>Stock Symbol Required</h4><p>Please select a stock symbol to predict.</p></div>', unsafe_allow_html=True)
+
+if __name__ == '__main__':
     main()
