@@ -6,6 +6,7 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
+import time
 
 # Function to fetch and preprocess stock data
 def get_data(stock_symbol):
@@ -75,115 +76,44 @@ def predict_stock_price(model, scaled_data, training_data_len, scaler):
 
     X_test = np.array(X_test)
 
-    if len(X_test.shape) == 3:
-        X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
-
     predictions = model.predict(X_test)
-    
-    # Ensure predictions match the scaler's input dimensions
-    num_features = scaled_data.shape[1]  # Number of features in scaled_data
+    num_features = scaled_data.shape[1]
     padding = np.zeros((predictions.shape[0], num_features - 1))
     predictions_full = np.hstack((predictions, padding))
 
-    predictions = scaler.inverse_transform(predictions_full)[:, 0]  # Only keep the predicted Close prices
-
+    predictions = scaler.inverse_transform(predictions_full)[:, 0]
     return predictions
 
+# Main Application
 def main():
-    # Custom CSS for advanced styling
+    # Custom CSS
     st.markdown("""
     <style>
-    /* Global Styles */
-    body {
-        background-color: #0E1117;
-        color: #FFFFFF;
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* Custom Gradient Background */
-    .stApp {
-        background: linear-gradient(135deg, #1a2b3c, #273542);
-    }
-
-    /* Enhanced Header Styling */
-    .header-container {
-        background: linear-gradient(90deg, #4b6cb7, #182848);
-        padding: 30px;
-        border-radius: 15px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-        margin-bottom: 30px;
-        text-align: center;
-    }
-
-    .header-container h1 {
-        color: white;
-        font-size: 3rem;
-        font-weight: 700;
-        margin-bottom: 10px;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-    }
-
-    .header-container p {
-        color: #e0e0e0;
-        font-size: 1.2rem;
-    }
-
-    /* Input Styling */
-    .stTextInput > div > div > input {
-        background-color: rgba(255, 255, 255, 0.1);
-        color: white;
-        border: 2px solid #4b6cb7;
-        border-radius: 10px;
-        padding: 10px;
-        font-size: 1rem;
-    }
-
-    /* Card Styling */
-    .card {
-        background-color: rgba(255, 255, 255, 0.05);
-        border-radius: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-    }
-
-    /* Progress Bar Styling */
-    .stProgress > div > div > div {
-        background-color: #4b6cb7;
-    }
+    body { background: linear-gradient(135deg, #1a2b3c, #273542); color: white; font-family: 'Roboto', sans-serif; }
+    .header-container { text-align: center; background: linear-gradient(90deg, #4b6cb7, #182848); padding: 20px; border-radius: 15px; }
+    .header-container h1 { color: white; font-size: 3rem; margin-bottom: 5px; }
+    .header-container p { font-size: 1.2rem; color: #ddd; }
+    .card { background-color: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 15px; margin-bottom: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
-    # Enhanced Header
+    # Header
     st.markdown("""
     <div class="header-container">
         <h1>🚀 Stock Price Predictor</h1>
-        <p>Leveraging Machine Learning to Forecast Stock Trends</p>
+        <p>Analyze & Predict Market Trends with AI-Powered Insights</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Stock Symbol Input with Enhanced Styling
+    # Input
     st.markdown("<div class='card'>", unsafe_allow_html=True)
-    stock_symbol = st.text_input('Enter Stock Symbol', 'AAPL', 
-                                 help='Enter a valid stock symbol (e.g., AAPL, GOOGL, MSFT)')
+    stock_symbol = st.text_input("🔍 Enter Stock Symbol", "AAPL", help="Enter a valid stock ticker (e.g., AAPL, MSFT, TSLA)")
     st.markdown("</div>", unsafe_allow_html=True)
 
     if stock_symbol:
-        # Processing Notification
-        st.markdown("""
-        <div class="card">
-        <h3>🔍 Processing Stock Data</h3>
-        <p>Fetching historical data, training LSTM model...</p>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.spinner("Fetching and processing data..."):
+            time.sleep(2)  # Simulating loading
 
-        # Progress Indicator
-        progress_bar = st.progress(0)
-        for percent_complete in range(100):
-            progress_bar.progress(percent_complete + 1)
-
-        # Data Processing and Prediction
         try:
             data = get_data(stock_symbol)
             scaled_data, X_train, y_train, training_data_len, scaler = prepare_data(data)
@@ -197,50 +127,22 @@ def main():
             test = data[training_data_len:]
             test['Predictions'] = predictions
 
-            # Interactive Plotly Chart
+            # Plot
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=train.index, y=train['Close'], mode='lines', 
-                                      name='Training Data', line=dict(color='#1f77b4', width=2)))
-            fig.add_trace(go.Scatter(x=test.index, y=test['Close'], mode='lines', 
-                                      name='Actual Test Data', line=dict(color='#2ca02c', width=2)))
-            fig.add_trace(go.Scatter(x=test.index, y=test['Predictions'], mode='lines', 
-                                      name='Predicted Prices', line=dict(color='#ff7f0e', dash='dot', width=2)))
+            fig.add_trace(go.Scatter(x=train.index, y=train['Close'], name='Training Data'))
+            fig.add_trace(go.Scatter(x=test.index, y=test['Close'], name='Actual Data'))
+            fig.add_trace(go.Scatter(x=test.index, y=test['Predictions'], name='Predictions'))
+            fig.update_layout(title=f"{stock_symbol} Stock Price Prediction", template="plotly_dark")
+            st.plotly_chart(fig)
 
-            fig.update_layout(
-                title=f'{stock_symbol} Stock Price Prediction',
-                xaxis_title='Date',
-                yaxis_title='Price',
-                template='plotly_dark',
-                height=600,
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Additional Insights
-            st.markdown("<div class='card'>", unsafe_allow_html=True)
-            st.subheader("🔮 Prediction Insights")
-            
-            # Calculate prediction accuracy
+            # Metrics
             mse = np.mean((test['Close'] - test['Predictions'])**2)
             mae = np.mean(np.abs(test['Close'] - test['Predictions']))
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Mean Squared Error", f"{mse:.2f}")
-            with col2:
-                st.metric("Mean Absolute Error", f"{mae:.2f}")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.metric("📉 Mean Squared Error", f"{mse:.2f}")
+            st.metric("📊 Mean Absolute Error", f"{mae:.2f}")
 
         except Exception as e:
-            st.error(f"Error processing stock data: {e}")
+            st.error(f"Error: {e}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
