@@ -6,8 +6,8 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
-from streamlit.components.v1 import html
 
+# Function to fetch and preprocess stock data
 def get_data(stock_symbol):
     data = yf.download(stock_symbol, start='2015-01-01', end='2024-01-01')
     data['50_MA'] = data['Close'].rolling(window=50).mean()
@@ -32,9 +32,9 @@ def get_data(stock_symbol):
     data['Close_Lag1'] = data['Close'].shift(1)
     data['Close_Lag2'] = data['Close'].shift(2)
     data = data.dropna()
-    
     return data
 
+# Function to prepare data for the model
 def prepare_data(data):
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled_data = scaler.fit_transform(data[['Close', '50_MA', '200_MA', 'RSI', 'MACD', 'Signal_Line', 'Volume_MA', 'Close_Lag1', 'Close_Lag2']])
@@ -52,8 +52,9 @@ def prepare_data(data):
     X_train, y_train = np.array(X_train), np.array(y_train)
     X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2])
     
-    return scaled_data, X_train, y_train, training_data_len
+    return scaled_data, X_train, y_train, training_data_len, scaler
 
+# Function to build the LSTM model
 def build_model(X_train):
     model = Sequential()
     model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
@@ -64,7 +65,8 @@ def build_model(X_train):
     model.compile(optimizer='adam', loss='mean_squared_error')
     return model
 
-def predict_stock_price(model, scaled_data, training_data_len):
+# Function to predict stock prices
+def predict_stock_price(model, scaled_data, training_data_len, scaler):
     test_data = scaled_data[training_data_len - 60:]
     X_test = []
 
@@ -72,13 +74,22 @@ def predict_stock_price(model, scaled_data, training_data_len):
         X_test.append(test_data[i-60:i, :])
 
     X_test = np.array(X_test)
-    X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
+
+    if len(X_test.shape) == 3:
+        X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
 
     predictions = model.predict(X_test)
-    predictions = scaler.inverse_transform(np.hstack((predictions, np.zeros((predictions.shape[0], X_test.shape[2] - 1)))))
+    
+    # Ensure predictions match the scaler's input dimensions
+    num_features = scaled_data.shape[1]  # Number of features in scaled_data
+    padding = np.zeros((predictions.shape[0], num_features - 1))
+    predictions_full = np.hstack((predictions, padding))
+
+    predictions = scaler.inverse_transform(predictions_full)[:, 0]  # Only keep the predicted Close prices
 
     return predictions
 
+# Main function for the Streamlit app
 def main():
     st.set_page_config(page_title="Stock Price Predictor", layout="wide")
     
@@ -99,16 +110,6 @@ def main():
             justify-content: center;
             margin-top: 30px;
         }
-        .input-box input {
-            height: 50px;
-            font-size: 20px;
-            border-radius: 10px;
-            padding: 10px;
-            width: 50%;
-            border: 2px solid #fff;
-            background-color: rgba(255, 255, 255, 0.2);
-            color: white;
-        }
         .stock-card {
             display: flex;
             justify-content: center;
@@ -123,18 +124,6 @@ def main():
         .stock-card h4 {
             color: #fff;
             font-size: 24px;
-        }
-        .stock-card p {
-            color: #fff;
-            font-size: 16px;
-        }
-        .chart-container {
-            display: flex;
-            justify-content: center;
-            margin-top: 50px;
-        }
-        .stProgress > div {
-            background-color: #ff5f6d !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -156,16 +145,16 @@ def main():
             progress.progress(i + 1)
 
         data = get_data(stock_symbol)
-        scaled_data, X_train, y_train, training_data_len = prepare_data(data)
+        scaled_data, X_train, y_train, training_data_len, scaler = prepare_data(data)
 
         model = build_model(X_train)
         model.fit(X_train, y_train, epochs=10, batch_size=32)
 
-        predictions = predict_stock_price(model, scaled_data, training_data_len)
+        predictions = predict_stock_price(model, scaled_data, training_data_len, scaler)
 
         train = data[:training_data_len]
         test = data[training_data_len:]
-        test['Predictions'] = predictions[:, 0]
+        test['Predictions'] = predictions
 
         fig, ax = plt.subplots(figsize=(14, 8))
         ax.plot(train['Close'], label='Training Data', color='blue', alpha=0.6)
@@ -181,7 +170,6 @@ def main():
         fig.patch.set_facecolor('#2c3e50')
 
         st.pyplot(fig)
-        
     else:
         st.markdown('<div class="stock-card"><h4>Stock Symbol Required</h4><p>Please enter a stock symbol to predict.</p></div>', unsafe_allow_html=True)
 
