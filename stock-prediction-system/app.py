@@ -2,129 +2,157 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
 import plotly.graph_objs as go
-import plotly.express as px
 
 # Function to fetch and preprocess stock data
 def get_data(stock_symbol):
-    data = yf.download(stock_symbol, start='2015-01-01', end='2024-01-01')
-    data['50_MA'] = data['Close'].rolling(window=50).mean()
-    data['200_MA'] = data['Close'].rolling(window=200).mean()
+    try:
+        data = yf.download(stock_symbol, start='2015-01-01', end='2024-01-01')
+        
+        if data.empty:
+            st.error(f"No data found for stock symbol {stock_symbol}")
+            return None
+        
+        data['50_MA'] = data['Close'].rolling(window=50).mean()
+        data['200_MA'] = data['Close'].rolling(window=200).mean()
 
-    def compute_RSI(data, window=14):
-        delta = data['Close'].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-        avg_gain = gain.rolling(window=window).mean()
-        avg_loss = loss.rolling(window=window).mean()
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
+        def compute_RSI(data, window=14):
+            delta = data['Close'].diff()
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+            avg_gain = gain.rolling(window=window).mean()
+            avg_loss = loss.rolling(window=window).mean()
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi
 
-    data['RSI'] = compute_RSI(data)
-    data['12_EMA'] = data['Close'].ewm(span=12, adjust=False).mean()
-    data['26_EMA'] = data['Close'].ewm(span=26, adjust=False).mean()
-    data['MACD'] = data['12_EMA'] - data['26_EMA']
-    data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
-    data['Volume_MA'] = data['Volume'].rolling(window=50).mean()
-    data['Close_Lag1'] = data['Close'].shift(1)
-    data['Close_Lag2'] = data['Close'].shift(2)
-    data = data.dropna()
-    return data
+        data['RSI'] = compute_RSI(data)
+        data['12_EMA'] = data['Close'].ewm(span=12, adjust=False).mean()
+        data['26_EMA'] = data['Close'].ewm(span=26, adjust=False).mean()
+        data['MACD'] = data['12_EMA'] - data['26_EMA']
+        data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
+        data['Volume_MA'] = data['Volume'].rolling(window=50).mean()
+        data['Close_Lag1'] = data['Close'].shift(1)
+        data['Close_Lag2'] = data['Close'].shift(2)
+        data = data.dropna()
+        return data
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+        return None
 
 # Function to prepare data for the model
 def prepare_data(data):
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(data[['Close', '50_MA', '200_MA', 'RSI', 'MACD', 'Signal_Line', 'Volume_MA', 'Close_Lag1', 'Close_Lag2']])
+    try:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaled_data = scaler.fit_transform(data[['Close', '50_MA', '200_MA', 'RSI', 'MACD', 'Signal_Line', 'Volume_MA', 'Close_Lag1', 'Close_Lag2']])
 
-    training_data_len = int(len(scaled_data) * 0.8)
-    train_data = scaled_data[:training_data_len]
+        training_data_len = int(len(scaled_data) * 0.8)
+        train_data = scaled_data[:training_data_len]
 
-    X_train = []
-    y_train = []
+        X_train = []
+        y_train = []
 
-    for i in range(60, len(train_data)):
-        X_train.append(train_data[i-60:i, :])
-        y_train.append(train_data[i, 0])
+        for i in range(60, len(train_data)):
+            X_train.append(train_data[i-60:i, :])
+            y_train.append(train_data[i, 0])
 
-    X_train, y_train = np.array(X_train), np.array(y_train)
-    X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2])
-    
-    return scaled_data, X_train, y_train, training_data_len, scaler
+        X_train, y_train = np.array(X_train), np.array(y_train)
+        X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2])
+        
+        return scaled_data, X_train, y_train, training_data_len, scaler
+    except Exception as e:
+        st.error(f"Error preparing data: {e}")
+        return None, None, None, None, None
 
 # Function to build the LSTM model
 def build_model(X_train):
-    model = Sequential()
-    model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
-    model.add(Dropout(0.2))
-    model.add(LSTM(units=50, return_sequences=False))
-    model.add(Dropout(0.2))
-    model.add(Dense(units=1))
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    return model
+    try:
+        # Use Input layer instead of specifying input_shape in LSTM
+        inputs = Input(shape=(X_train.shape[1], X_train.shape[2]))
+        
+        x = LSTM(units=50, return_sequences=True)(inputs)
+        x = Dropout(0.2)(x)
+        x = LSTM(units=50, return_sequences=False)(x)
+        x = Dropout(0.2)(x)
+        outputs = Dense(units=1)(x)
+        
+        model = Sequential([inputs, outputs])
+        model.compile(optimizer='adam', loss='mean_squared_error')
+        return model
+    except Exception as e:
+        st.error(f"Error building model: {e}")
+        return None
 
 # Function to predict stock prices
 def predict_stock_price(model, scaled_data, training_data_len, scaler):
-    test_data = scaled_data[training_data_len - 60:]
-    X_test = []
+    try:
+        test_data = scaled_data[training_data_len - 60:]
+        X_test = []
 
-    for i in range(60, len(test_data)):
-        X_test.append(test_data[i-60:i, :])
+        for i in range(60, len(test_data)):
+            X_test.append(test_data[i-60:i, :])
 
-    X_test = np.array(X_test)
+        X_test = np.array(X_test)
 
-    if len(X_test.shape) == 3:
-        X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
+        if len(X_test.shape) == 3:
+            X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
 
-    predictions = model.predict(X_test)
-    
-    # Ensure predictions match the scaler's input dimensions
-    num_features = scaled_data.shape[1]
-    padding = np.zeros((predictions.shape[0], num_features - 1))
-    predictions_full = np.hstack((predictions, padding))
+        predictions = model.predict(X_test)
+        
+        # Ensure predictions match the scaler's input dimensions
+        num_features = scaled_data.shape[1]
+        padding = np.zeros((predictions.shape[0], num_features - 1))
+        predictions_full = np.hstack((predictions, padding))
 
-    predictions = scaler.inverse_transform(predictions_full)[:, 0]
+        predictions = scaler.inverse_transform(predictions_full)[:, 0]
 
-    return predictions
+        return predictions
+    except Exception as e:
+        st.error(f"Error predicting stock prices: {e}")
+        return None
 
 # Function to generate stock insights
 def generate_insights(data, predictions):
-    # Calculate performance metrics
-    last_close = data['Close'].iloc[-1]
-    first_close = data['Close'].iloc[0]
-    total_return = ((last_close - first_close) / first_close) * 100
-    
-    # Volatility calculation
-    volatility = data['Close'].pct_change().std() * np.sqrt(252)
-    
-    # Recent trend
-    recent_trend = 'Bullish' if data['Close'].iloc[-1] > data['Close'].iloc[-30] else 'Bearish'
-    
-    # Prediction insights
-    predicted_last = predictions[-1]
-    prediction_direction = 'Positive' if predicted_last > last_close else 'Negative'
-    
-    insights = {
-        'Total Return': f'{total_return:.2f}%',
-        'Annualized Volatility': f'{volatility:.2f}',
-        'Recent Trend': recent_trend,
-        'Prediction Sentiment': prediction_direction,
-        'Current Price': f'${last_close:.2f}',
-        'Predicted Next Price': f'${predicted_last:.2f}'
-    }
-    
-    return insights
+    try:
+        # Calculate performance metrics
+        last_close = data['Close'].iloc[-1]
+        first_close = data['Close'].iloc[0]
+        total_return = ((last_close - first_close) / first_close) * 100
+        
+        # Volatility calculation
+        volatility = data['Close'].pct_change().std() * np.sqrt(252)
+        
+        # Recent trend
+        recent_trend = 'Bullish' if data['Close'].iloc[-1] > data['Close'].iloc[-30] else 'Bearish'
+        
+        # Prediction insights
+        predicted_last = predictions[-1]
+        prediction_direction = 'Positive' if predicted_last > last_close else 'Negative'
+        
+        insights = {
+            'Total Return': f'{total_return:.2f}%',
+            'Annualized Volatility': f'{volatility:.2f}',
+            'Recent Trend': recent_trend,
+            'Prediction Sentiment': prediction_direction,
+            'Current Price': f'${last_close:.2f}',
+            'Predicted Next Price': f'${predicted_last:.2f}'
+        }
+        
+        return insights
+    except Exception as e:
+        st.error(f"Error generating insights: {e}")
+        return {}
 
 # Main Streamlit App
 def main():
-    # Custom CSS for enhanced styling
+    # Page configuration
     st.set_page_config(page_title="StockSage: Advanced Price Predictor", layout="wide")
     
+    # Custom CSS
     st.markdown("""
     <style>
     .stApp {
@@ -171,13 +199,28 @@ def main():
     if stock_symbol:
         # Data Processing
         with st.spinner('Fetching data and training model...'):
+            # Error handling for each step
             data = get_data(stock_symbol)
+            if data is None:
+                st.error("Failed to retrieve stock data. Please try again.")
+                return
+            
             scaled_data, X_train, y_train, training_data_len, scaler = prepare_data(data)
+            if scaled_data is None or X_train is None:
+                st.error("Failed to prepare data for modeling. Please try again.")
+                return
             
             model = build_model(X_train)
+            if model is None:
+                st.error("Failed to build prediction model. Please try again.")
+                return
+            
             model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
             
             predictions = predict_stock_price(model, scaled_data, training_data_len, scaler)
+            if predictions is None:
+                st.error("Failed to generate predictions. Please try again.")
+                return
         
         # Generate Insights
         insights = generate_insights(data, predictions)
