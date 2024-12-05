@@ -2,10 +2,13 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
+import plotly.graph_objs as go
+import plotly.express as px
 
 # Function to fetch and preprocess stock data
 def get_data(stock_symbol):
@@ -81,99 +84,160 @@ def predict_stock_price(model, scaled_data, training_data_len, scaler):
     predictions = model.predict(X_test)
     
     # Ensure predictions match the scaler's input dimensions
-    num_features = scaled_data.shape[1]  # Number of features in scaled_data
+    num_features = scaled_data.shape[1]
     padding = np.zeros((predictions.shape[0], num_features - 1))
     predictions_full = np.hstack((predictions, padding))
 
-    predictions = scaler.inverse_transform(predictions_full)[:, 0]  # Only keep the predicted Close prices
+    predictions = scaler.inverse_transform(predictions_full)[:, 0]
 
     return predictions
 
-# Main function for the Streamlit app
+# Function to generate stock insights
+def generate_insights(data, predictions):
+    # Calculate performance metrics
+    last_close = data['Close'].iloc[-1]
+    first_close = data['Close'].iloc[0]
+    total_return = ((last_close - first_close) / first_close) * 100
+    
+    # Volatility calculation
+    volatility = data['Close'].pct_change().std() * np.sqrt(252)
+    
+    # Recent trend
+    recent_trend = 'Bullish' if data['Close'].iloc[-1] > data['Close'].iloc[-30] else 'Bearish'
+    
+    # Prediction insights
+    predicted_last = predictions[-1]
+    prediction_direction = 'Positive' if predicted_last > last_close else 'Negative'
+    
+    insights = {
+        'Total Return': f'{total_return:.2f}%',
+        'Annualized Volatility': f'{volatility:.2f}',
+        'Recent Trend': recent_trend,
+        'Prediction Sentiment': prediction_direction,
+        'Current Price': f'${last_close:.2f}',
+        'Predicted Next Price': f'${predicted_last:.2f}'
+    }
+    
+    return insights
+
+# Main Streamlit App
 def main():
-    st.set_page_config(page_title="Stock Price Predictor", layout="wide")
+    # Custom CSS for enhanced styling
+    st.set_page_config(page_title="StockSage: Advanced Price Predictor", layout="wide")
     
     st.markdown("""
-        <style>
-        body {
-            background: linear-gradient(135deg, #ff5f6d, #ffc3a0);
-            font-family: 'Arial', sans-serif;
-        }
-        .header {
-            text-align: center;
-            color: white;
-            font-size: 40px;
-            margin-top: 50px;
-        }
-        .input-box {
-            display: flex;
-            justify-content: center;
-            margin-top: 30px;
-        }
-        .stock-card {
-            display: flex;
-            justify-content: center;
-            flex-direction: column;
-            align-items: center;
-            margin-top: 30px;
-            border-radius: 15px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-        }
-        .stock-card h4 {
-            color: #fff;
-            font-size: 24px;
-        }
-        </style>
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        font-family: 'Inter', sans-serif;
+    }
+    .main-header {
+        font-size: 3rem;
+        font-weight: 800;
+        text-align: center;
+        color: #2c3e50;
+        margin-bottom: 30px;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+    .stock-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease;
+    }
+    .stock-card:hover {
+        transform: scale(1.02);
+    }
+    </style>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="header">Stock Price Prediction using LSTM</div>', unsafe_allow_html=True)
-
-    # Dropdown for selecting stock symbol
-    stock_options = ['AAPL', 'GOOG', 'AMZN', 'MSFT', 'TSLA', 'NFLX', 'META']
-    stock_symbol = st.selectbox('Select Stock Symbol:', stock_options)
+    # Main Title
+    st.markdown('<div class="main-header">StockSage: AI-Powered Price Predictor</div>', unsafe_allow_html=True)
+    
+    # Stock Selection
+    col1, col2 = st.columns([2,1])
+    
+    with col1:
+        stock_options = ['AAPL', 'GOOG', 'AMZN', 'MSFT', 'TSLA', 'NFLX', 'META']
+        stock_symbol = st.selectbox('Select Stock Symbol:', stock_options)
+    
+    with col2:
+        prediction_period = st.selectbox('Prediction Horizon:', 
+                                         ['Short-term (30 days)', 
+                                          'Medium-term (90 days)', 
+                                          'Long-term (180 days)'])
     
     if stock_symbol:
-        st.markdown("""
-            <div class="stock-card">
-            <h4>Processing Stock Data...</h4>
-            <p>Fetching historical data and training the model...</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        progress = st.progress(0)
-        for i in range(100):
-            progress.progress(i + 1)
-
-        data = get_data(stock_symbol)
-        scaled_data, X_train, y_train, training_data_len, scaler = prepare_data(data)
-
-        model = build_model(X_train)
-        model.fit(X_train, y_train, epochs=10, batch_size=32)
-
-        predictions = predict_stock_price(model, scaled_data, training_data_len, scaler)
-
-        train = data[:training_data_len]
-        test = data[training_data_len:]
-        test['Predictions'] = predictions
-
-        fig, ax = plt.subplots(figsize=(14, 8))
-        ax.plot(train['Close'], label='Training Data', color='blue', alpha=0.6)
-        ax.plot(test['Close'], label='Test Data', color='green', alpha=0.6)
-        ax.plot(test['Predictions'], label='Predicted Data', color='red', linestyle='--', alpha=0.8)
-
-        ax.set_title(f'{stock_symbol} Stock Price Prediction', fontsize=20, color='white')
-        ax.set_xlabel('Date', fontsize=14, color='white')
-        ax.set_ylabel('Price', fontsize=14, color='white')
+        # Data Processing
+        with st.spinner('Fetching data and training model...'):
+            data = get_data(stock_symbol)
+            scaled_data, X_train, y_train, training_data_len, scaler = prepare_data(data)
+            
+            model = build_model(X_train)
+            model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
+            
+            predictions = predict_stock_price(model, scaled_data, training_data_len, scaler)
+        
+        # Generate Insights
+        insights = generate_insights(data, predictions)
+        
+        # Create columns for layout
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown('<div class="stock-card">', unsafe_allow_html=True)
+            st.subheader('Stock Performance Insights')
+            for key, value in insights.items():
+                st.metric(key, value)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col2:
+            # Technical Indicators Visualization
+            fig_tech = go.Figure()
+            fig_tech.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='Close Price', line=dict(color='blue')))
+            fig_tech.add_trace(go.Scatter(x=data.index, y=data['50_MA'], mode='lines', name='50-Day MA', line=dict(color='red', dash='dot')))
+            fig_tech.add_trace(go.Scatter(x=data.index, y=data['200_MA'], mode='lines', name='200-Day MA', line=dict(color='green', dash='dot')))
+            
+            fig_tech.update_layout(
+                title=f'{stock_symbol} Technical Indicators',
+                xaxis_title='Date',
+                yaxis_title='Price',
+                template='plotly_white'
+            )
+            
+            st.plotly_chart(fig_tech, use_container_width=True)
+        
+        # Prediction Visualization
+        st.markdown('<div class="stock-card">', unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(12, 6), facecolor='white')
+        ax.plot(data.index[training_data_len:], data['Close'].iloc[training_data_len:], label='Actual Price', color='blue')
+        ax.plot(data.index[training_data_len:], predictions, label='Predicted Price', color='red', linestyle='--')
+        
+        ax.set_title(f'{stock_symbol} Stock Price Prediction', fontsize=15)
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
         ax.legend()
-
-        ax.set_facecolor('#2c3e50')
-        fig.patch.set_facecolor('#2c3e50')
-
+        
         st.pyplot(fig)
-    else:
-        st.markdown('<div class="stock-card"><h4>Stock Symbol Required</h4><p>Please select a stock symbol to predict.</p></div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Detailed Prediction Analysis
+        st.markdown('<div class="stock-card">', unsafe_allow_html=True)
+        st.subheader('Prediction Analysis')
+        
+        # Confidence and Error Metrics
+        pred_df = pd.DataFrame({
+            'Actual': data['Close'].iloc[training_data_len:],
+            'Predicted': predictions
+        })
+        pred_df['Absolute Error'] = abs(pred_df['Actual'] - pred_df['Predicted'])
+        pred_df['Percentage Error'] = (pred_df['Absolute Error'] / pred_df['Actual']) * 100
+        
+        st.write("Prediction Accuracy Metrics:")
+        st.dataframe(pred_df.describe())
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == '__main__':
     main()
