@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
+from tensorflow.keras.layers import LSTM, Dense, Dropout
 import plotly.graph_objs as go
 
 # Function to fetch and preprocess stock data
@@ -71,16 +71,14 @@ def prepare_data(data):
 # Function to build the LSTM model
 def build_model(X_train):
     try:
-        # Use Input layer instead of specifying input_shape in LSTM
-        inputs = Input(shape=(X_train.shape[1], X_train.shape[2]))
+        model = Sequential([
+            LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+            Dropout(0.2),
+            LSTM(units=50, return_sequences=False),
+            Dropout(0.2),
+            Dense(units=1)
+        ])
         
-        x = LSTM(units=50, return_sequences=True)(inputs)
-        x = Dropout(0.2)(x)
-        x = LSTM(units=50, return_sequences=False)(x)
-        x = Dropout(0.2)(x)
-        outputs = Dense(units=1)(x)
-        
-        model = Sequential([inputs, outputs])
         model.compile(optimizer='adam', loss='mean_squared_error')
         return model
     except Exception as e:
@@ -147,7 +145,7 @@ def generate_insights(data, predictions):
         st.error(f"Error generating insights: {e}")
         return {}
 
-# Main Streamlit App
+# Main Streamlit App (rest of the code remains the same as in the previous submission)
 def main():
     # Page configuration
     st.set_page_config(page_title="StockSage: Advanced Price Predictor", layout="wide")
