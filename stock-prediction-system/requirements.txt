@@ -1,9 +1,7 @@
 streamlit
-matplotlib
-pandas
 numpy
+pandas
+matplotlib
 yfinance
 scikit-learn
 tensorflow
-plotly 
-seaborn
