@@ -7,15 +7,13 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
+import tensorflow as tf
 from datetime import datetime, timedelta
 import ta
-import requests
-from textblob import TextBlob
 import logging
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, Dict, Optional
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +21,6 @@ logger = logging.getLogger(__name__)
 
 # Cache configuration
 CACHE_TTL = 3600  # 1 hour cache
-cache = {}
-cache_lock = threading.Lock()
 
 class DataCache:
     def __init__(self):
@@ -381,127 +377,6 @@ def display_enhanced_metrics(data: pd.DataFrame):
         
         st.markdown('</div>', unsafe_allow_html=True)
 
-def main():
-    # Page configuration
-    st.set_page_config(
-        page_title="Advanced Stock Analysis Dashboard",
-        page_icon="📈",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    
-    # Apply custom theme
-    create_custom_theme()
-    
-    # Header
-    st.title("📈 Advanced Stock Analysis & Prediction Dashboard")
-    st.markdown("---")
-    
-    # Sidebar configuration
-    with st.sidebar:
-        st.header("Analysis Configuration")
-        
-        stock_symbol = st.selectbox(
-            'Select Stock Symbol:',
-            ['AAPL', 'GOOG', 'AMZN', 'MSFT', 'TSLA', 'META', 'NVDA'],
-            help="Choose the stock symbol to analyze"
-        )
-        
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=365*2)
-        
-        date_range = st.date_input(
-            "Select Date Range",
-            value=(start_date, end_date),
-            help="Choose the date range for analysis"
-        )
-        
-        prediction_days = st.slider(
-            "Prediction Horizon (Days)",
-            1, 30, 7,
-            help="Number of days to forecast"
-        )
-        
-        analysis_button = st.button(
-            "Analyze Stock",
-            help="Click to start the analysis",
-            use_container_width=True
-        )
-    
-    if analysis_button:
-        try:
-            with st.spinner("Fetching and analyzing stock data..."):
-                # Get stock data
-                # Get stock data
-                data = get_stock_data(stock_symbol, date_range[0], date_range[1])
-                
-                # Display enhanced metrics
-                display_enhanced_metrics(data)
-                
-                # Prepare data for model
-                with st.spinner("Training prediction model..."):
-                    try:
-                        X_train, X_test, y_train, y_test, scaler = prepare_lstm_data(data)
-                        
-                        # Build and train model
-                        model = build_enhanced_lstm_model(X_train.shape[1:])
-                        
-                        # Training progress bar
-                        progress_bar = st.progress(0)
-                        epochs = 50
-                        
-                        class TrainingCallback(tf.keras.callbacks.Callback):
-                            def on_epoch_end(self, epoch, logs=None):
-                                progress = (epoch + 1) / epochs
-                                progress_bar.progress(progress)
-                        
-                        history = model.fit(
-                            X_train, y_train,
-                            epochs=epochs,
-                            batch_size=32,
-                            validation_split=0.1,
-                            callbacks=[TrainingCallback()],
-                            verbose=0
-                        )
-                        
-                        # Make predictions
-                        test_predictions = model.predict(X_test)
-                        future_predictions = predict_future_prices(
-                            model, data, scaler, prediction_days
-                        )
-                        
-                        # Create prediction DataFrame
-                        future_dates = pd.date_range(
-                            start=data.index[-1] + pd.Timedelta(days=1),
-                            periods=prediction_days
-                        )
-                        predictions_df = pd.DataFrame(
-                            index=future_dates,
-                            data={'Predictions': future_predictions}
-                        )
-                        
-                        # Display interactive chart
-                        st.subheader("Technical Analysis & Predictions")
-                        fig = create_enhanced_chart(data, predictions_df)
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Model performance metrics
-                        display_model_metrics(y_test, test_predictions)
-                        
-                        # Display trading signals
-                        display_trading_signals(data)
-                        
-                        # Risk analysis
-                        display_risk_analysis(data)
-                        
-                    except Exception as e:
-                        st.error(f"Error in model training: {str(e)}")
-                        logger.error(f"Model training error: {str(e)}", exc_info=True)
-                
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-            logger.error(f"Application error: {str(e)}", exc_info=True)
-
 def prepare_lstm_data(data: pd.DataFrame, lookback: int = 60) -> Tuple:
     """
     Prepare data for LSTM model with enhanced feature engineering.
@@ -636,6 +511,61 @@ def display_model_metrics(y_true: np.ndarray, y_pred: np.ndarray):
         
         st.markdown('</div>', unsafe_allow_html=True)
 
+def generate_trading_signals(data: pd.DataFrame) -> Dict[str, Dict[str, str]]:
+    """
+    Generate trading signals based on technical indicators.
+    """
+    signals = {
+        'technical': {},
+        'trend': {}
+    }
+    
+    # RSI signals
+    rsi = data['RSI'].iloc[-1]
+    if rsi > 70:
+        signals['technical']['RSI'] = 'Overbought'
+    elif rsi < 30:
+        signals['technical']['RSI'] = 'Oversold'
+    else:
+        signals['technical']['RSI'] = 'Neutral'
+    
+    # MACD signals
+    macd = data['MACD'].iloc[-1]
+    signal = data['Signal_Line'].iloc[-1]
+    if macd > signal:
+        signals['technical']['MACD'] = 'Bullish'
+    else:
+        signals['technical']['MACD'] = 'Bearish'
+    
+    # Moving Average signals
+    current_price = data['Close'].iloc[-1]
+    ma_50 = data['50_MA'].iloc[-1]
+    ma_200 = data['200_MA'].iloc[-1]
+    
+    if current_price > ma_50 > ma_200:
+        signals['trend']['Moving Averages'] = 'Strong Uptrend'
+    elif current_price > ma_50 and ma_50 < ma_200:
+        signals['trend']['Moving Averages'] = 'Potential Uptrend'
+    elif current_price < ma_50 < ma_200:
+        signals['trend']['Moving Averages'] = 'Strong Downtrend'
+    elif current_price < ma_50 and ma_50 > ma_200:
+        signals['trend']['Moving Averages'] = 'Potential Downtrend'
+    else:
+        signals['trend']['Moving Averages'] = 'Neutral'
+    
+    # Bollinger Bands signals
+    upper_bb = data['Bollinger_High'].iloc[-1]
+    lower_bb = data['Bollinger_Low'].iloc[-1]
+    
+    if current_price > upper_bb:
+        signals['technical']['Bollinger Bands'] = 'Overbought'
+    elif current_price < lower_bb:
+        signals['technical']['Bollinger Bands'] = 'Oversold'
+    else:
+        signals['technical']['Bollinger Bands'] = 'Within Bands'
+    
+    return signals
+
 def display_trading_signals(data: pd.DataFrame):
     """
     Display trading signals based on technical indicators.
@@ -662,6 +592,20 @@ def display_trading_signals(data: pd.DataFrame):
         
         st.markdown('</div>', unsafe_allow_html=True)
 
+def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, float]:
+    """
+    Calculate risk analysis metrics.
+    """
+    returns = data['Close'].pct_change().dropna()
+    
+    risk_metrics = {
+        'var': np.percentile(returns, 5) * 100,  # 95% VaR
+        'sharpe': (returns.mean() / returns.std()) * np.sqrt(252),  # Annualized Sharpe Ratio
+        'max_drawdown': ((data['Close'].cummax() - data['Close']) / data['Close'].cummax()).max() * 100
+    }
+    
+    return risk_metrics
+
 def display_risk_analysis(data: pd.DataFrame):
     """
     Display risk analysis metrics.
@@ -685,5 +629,126 @@ def display_risk_analysis(data: pd.DataFrame):
         
         st.markdown('</div>', unsafe_allow_html=True)
 
+def main():
+    # Page configuration
+    st.set_page_config(
+        page_title="Advanced Stock Analysis Dashboard",
+        page_icon="📈",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Apply custom theme
+    create_custom_theme()
+    
+    # Header
+    st.title("📈 Advanced Stock Analysis & Prediction Dashboard")
+    st.markdown("---")
+    
+    # Sidebar configuration
+    with st.sidebar:
+        st.header("Analysis Configuration")
+        
+        stock_symbol = st.selectbox(
+            'Select Stock Symbol:',
+            ['AAPL', 'GOOG', 'AMZN', 'MSFT', 'TSLA', 'META', 'NVDA'],
+            help="Choose the stock symbol to analyze"
+        )
+        
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=365*2)
+        
+        date_range = st.date_input(
+            "Select Date Range",
+            value=(start_date, end_date),
+            help="Choose the date range for analysis"
+        )
+        
+        prediction_days = st.slider(
+            "Prediction Horizon (Days)",
+            1, 30, 7,
+            help="Number of days to forecast"
+        )
+        
+        analysis_button = st.button(
+            "Analyze Stock",
+            help="Click to start the analysis",
+            use_container_width=True
+        )
+    
+    if analysis_button:
+        try:
+            with st.spinner("Fetching and analyzing stock data..."):
+                # Get stock data
+                data = get_stock_data(stock_symbol, date_range[0], date_range[1])
+                
+                # Display enhanced metrics
+                display_enhanced_metrics(data)
+                
+                # Prepare data for model
+                with st.spinner("Training prediction model..."):
+                    try:
+                        X_train, X_test, y_train, y_test, scaler = prepare_lstm_data(data)
+                        
+                        # Build and train model
+                        model = build_enhanced_lstm_model(X_train.shape[1:])
+                        
+                        # Training progress bar
+                        progress_bar = st.progress(0)
+                        epochs = 50
+                        
+                        class TrainingCallback(tf.keras.callbacks.Callback):
+                            def on_epoch_end(self, epoch, logs=None):
+                                progress = (epoch + 1) / epochs
+                                progress_bar.progress(progress)
+                        
+                        history = model.fit(
+                            X_train, y_train,
+                            epochs=epochs,
+                            batch_size=32,
+                            validation_split=0.1,
+                            callbacks=[TrainingCallback()],
+                            verbose=0
+                        )
+                        
+                        # Make predictions
+                        test_predictions = model.predict(X_test)
+                        future_predictions = predict_future_prices(
+                            model, data, scaler, prediction_days
+                        )
+                        
+                        # Create prediction DataFrame
+                        future_dates = pd.date_range(
+                            start=data.index[-1] + pd.Timedelta(days=1),
+                            periods=prediction_days
+                        )
+                        predictions_df = pd.DataFrame(
+                            index=future_dates,
+                            data={'Predictions': future_predictions}
+                        )
+                        
+                        # Display interactive chart
+                        st.subheader("Technical Analysis & Predictions")
+                        fig = create_enhanced_chart(data, predictions_df)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Model performance metrics
+                        display_model_metrics(y_test, test_predictions)
+                        
+                        # Display trading signals
+                        display_trading_signals(data)
+                        
+                        # Risk analysis
+                        display_risk_analysis(data)
+                        
+                    except Exception as e:
+                        st.error(f"Error in model training: {str(e)}")
+                        logger.error(f"Model training error: {str(e)}", exc_info=True)
+                
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+            logger.error(f"Application error: {str(e)}", exc_info=True)
+
 if __name__ == "__main__":
     main()
+```
