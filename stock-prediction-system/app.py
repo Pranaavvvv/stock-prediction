@@ -259,11 +259,14 @@ def main():
             st.subheader("Recent News Sentiment")
             sentiments = get_news_sentiment(stock_symbol)
             if sentiments:
-                for article in sentiments:
+               for article in sentiments:
                     sentiment_color = "green" if article["sentiment"] > 0 else "red" if article["sentiment"] < 0 else "yellow"
-                    st.markdown(f"<span style='color:{sentiment_color};'>{'🔺' if article['sentimentmarkdown(f"<span style='color:{sentiment_color};'>{'🔺' if article['sentiment'] > 0 else '🔻' if article['sentiment'] < 0 else '➖'} {article['title']}</span>", unsafe_allow_html=True)
-                st.markdown(f"Sentiment Score: {article['sentiment']:.2f}")
-                st.markdown("---")
+                    st.markdown(
+                    f"<span style='color:{sentiment_color};'>{'🔺' if article['sentiment'] > 0 else '🔻' if article['sentiment'] < 0 else '➖'} {article['title']}</span>",
+                    unsafe_allow_html=True
+                     )
+                    st.markdown(f"Sentiment Score: {article['sentiment']:.2f}")
+                    st.markdown("---")
 
     # Additional Information
     with st.expander("About this app"):
