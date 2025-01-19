@@ -11,7 +11,7 @@ import tensorflow as tf
 from datetime import datetime, timedelta
 import ta
 import logging
-from typing import Tuple, Dict, Optional
+from typing import Tuple, List, Dict, Optional
 import time
 import threading
 
@@ -116,11 +116,13 @@ def get_stock_data(stock_symbol: str, start_date: datetime, end_date: datetime) 
         data = yf.download(stock_symbol, start=start_date, end=end_date)
         if data.empty:
             raise StockDataError(f"No data available for {stock_symbol}")
+        if data['Close'].empty:
+            raise StockDataError(f"No closing price data available for {stock_symbol}")
         
         # Calculate technical indicators
         data['50_MA'] = data['Close'].rolling(window=50).mean()
         data['200_MA'] = data['Close'].rolling(window=200).mean()
-        data['RSI'] = ta.momentum.RSIIndicator(close=data['Close']).rsi()
+        data['RSI'] = ta.momentum.RSIIndicator(close=data['Close'].values).rsi()
         
         # MACD
         macd = ta.trend.MACD(close=data['Close'])
