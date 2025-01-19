@@ -18,7 +18,7 @@ def get_data(stock_symbol, start_date, end_date):
     data = yf.download(stock_symbol, start=start_date, end=end_date)
     data['50_MA'] = data['Close'].rolling(window=50).mean()
     data['200_MA'] = data['Close'].rolling(window=200).mean()
-       data['RSI'] = ta.momentum.RSIIndicator(close=data['Close'].squeeze()).rsi()
+    data['RSI'] = ta.momentum.RSIIndicator(close=data['Close'].squeeze()).rsi()
     
     # Calculate MACD - Fix: Ensure input is a pandas Series
     macd_indicator = ta.trend.MACD(close=data['Close'].squeeze())
