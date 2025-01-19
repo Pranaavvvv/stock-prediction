@@ -18,13 +18,28 @@ def get_data(stock_symbol, start_date, end_date):
     data = yf.download(stock_symbol, start=start_date, end=end_date)
     data['50_MA'] = data['Close'].rolling(window=50).mean()
     data['200_MA'] = data['Close'].rolling(window=200).mean()
-    data['RSI'] = ta.momentum.RSIIndicator(data['Close']).rsi()
-    data['MACD'] = ta.trend.MACD(data['Close']).macd()
-    data['Signal_Line'] = ta.trend.MACD(data['Close']).macd_signal()
+       data['RSI'] = ta.momentum.RSIIndicator(close=data['Close'].squeeze()).rsi()
+    
+    # Calculate MACD - Fix: Ensure input is a pandas Series
+    macd_indicator = ta.trend.MACD(close=data['Close'].squeeze())
+    data['MACD'] = macd_indicator.macd()
+    data['Signal_Line'] = macd_indicator.macd_signal()
+    
+    # Calculate other indicators
     data['Volume_MA'] = data['Volume'].rolling(window=50).mean()
-    data['ATR'] = ta.volatility.AverageTrueRange(data['High'], data['Low'], data['Close']).average_true_range()
-    data['Bollinger_High'] = ta.volatility.BollingerBands(data['Close']).bollinger_hband()
-    data['Bollinger_Low'] = ta.volatility.BollingerBands(data['Close']).bollinger_lband()
+    
+    # Fix: Ensure input for ATR is a pandas Series
+    data['ATR'] = ta.volatility.AverageTrueRange(
+        high=data['High'].squeeze(),
+        low=data['Low'].squeeze(),
+        close=data['Close'].squeeze()
+    ).average_true_range()
+    
+    # Fix: Ensure input for Bollinger Bands is a pandas Series
+    bollinger = ta.volatility.BollingerBands(close=data['Close'].squeeze())
+    data['Bollinger_High'] = bollinger.bollinger_hband()
+    data['Bollinger_Low'] = bollinger.bollinger_lband()
+    
     data['Close_Lag1'] = data['Close'].shift(1)
     data['Close_Lag2'] = data['Close'].shift(2)
     data['Daily_Return'] = data['Close'].pct_change()
