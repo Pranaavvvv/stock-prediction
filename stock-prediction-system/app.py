@@ -11,7 +11,7 @@ import tensorflow as tf
 from datetime import datetime, timedelta
 import ta
 import logging
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, Dict, Optional
 import time
 import threading
 
@@ -114,33 +114,49 @@ def get_stock_data(stock_symbol: str, start_date: datetime, end_date: datetime) 
             return cached_data
         
         data = yf.download(stock_symbol, start=start_date, end=end_date)
+        
+        # Check if data is empty
         if data.empty:
             raise StockDataError(f"No data available for {stock_symbol}")
-        if data['Close'].empty:
-            raise StockDataError(f"No closing price data available for {stock_symbol}")
+
+        # Check for required columns
+        required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+        if not all(col in data.columns for col in required_columns):
+            raise StockDataError(f"Missing required columns for {stock_symbol}")
+
+        # Check for sufficient data points
+        if len(data) < 200:  # We need at least 200 data points for the 200-day moving average
+            raise StockDataError(f"Insufficient data points for {stock_symbol}")
+
+        # Handle NaN values
+        data = data.dropna()
+        if data.empty:
+            raise StockDataError(f"No valid data points after removing NaN values for {stock_symbol}")
         
         # Calculate technical indicators
         data['50_MA'] = data['Close'].rolling(window=50).mean()
         data['200_MA'] = data['Close'].rolling(window=200).mean()
-        data['RSI'] = ta.momentum.RSIIndicator(close=data['Close'].values).rsi()
+        
+        # RSI calculation
+        delta = data['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        data['RSI'] = 100 - (100 / (1 + rs))
         
         # MACD
-        macd = ta.trend.MACD(close=data['Close'])
-        data['MACD'] = macd.macd()
-        data['Signal_Line'] = macd.macd_signal()
+        exp1 = data['Close'].ewm(span=12, adjust=False).mean()
+        exp2 = data['Close'].ewm(span=26, adjust=False).mean()
+        data['MACD'] = exp1 - exp2
+        data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
         
         # Additional indicators
         data['Volume_MA'] = data['Volume'].rolling(window=20).mean()
-        data['ATR'] = ta.volatility.AverageTrueRange(
-            high=data['High'],
-            low=data['Low'],
-            close=data['Close']
-        ).average_true_range()
+        data['ATR'] = ta.volatility.average_true_range(data['High'], data['Low'], data['Close'])
         
         # Bollinger Bands
-        bollinger = ta.volatility.BollingerBands(close=data['Close'])
-        data['Bollinger_High'] = bollinger.bollinger_hband()
-        data['Bollinger_Low'] = bollinger.bollinger_lband()
+        data['Bollinger_High'] = data['Close'].rolling(window=20).mean() + (data['Close'].rolling(window=20).std() * 2)
+        data['Bollinger_Low'] = data['Close'].rolling(window=20).mean() - (data['Close'].rolling(window=20).std() * 2)
         
         # Price momentum features
         data['Close_Lag1'] = data['Close'].shift(1)
@@ -382,6 +398,7 @@ def display_enhanced_metrics(data: pd.DataFrame):
 def prepare_lstm_data(data: pd.DataFrame, lookback: int = 60) -> Tuple:
     """
     Prepare data for LSTM model with enhanced feature engineering.
+    
     """
     try:
         features = [
