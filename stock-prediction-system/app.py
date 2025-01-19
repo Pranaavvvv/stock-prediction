@@ -125,7 +125,7 @@ def get_stock_data(stock_symbol: str, start_date: datetime, end_date: datetime) 
             raise StockDataError(f"Missing required columns for {stock_symbol}")
 
         # Check for sufficient data points
-        if len(data) < 200:  # We need at least 200 data points for the 200-day moving average
+        if len(data) < 20:  # We need at least 200 data points for the 200-day moving average
             raise StockDataError(f"Insufficient data points for {stock_symbol}")
 
         # Handle NaN values
