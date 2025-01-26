@@ -15,12 +15,10 @@ from typing import Tuple, Dict, Optional
 import time
 import threading
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Cache configuration
-CACHE_TTL = 3600  # 1 hour cache
+CACHE_TTL = 3600
 
 class DataCache:
     def __init__(self):
@@ -379,10 +377,8 @@ def prepare_lstm_data(data: pd.DataFrame, lookback: int = 60) -> Tuple:
         X, y = np.array(X), np.array(y)
         
         train_size = int(len(X) * 0.8)
-        X_train = X[:train_size]
-        X_test = X[train_size:]
-        y_train = y[:train_size]
-        y_test = y[train_size:]
+        X_train, X_test = X[:train_size], X[train_size:]
+        y_train, y_test = y[:train_size], y[train_size:]
         
         return X_train, X_test, y_train, y_test, scaler
     
@@ -550,8 +546,8 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, float]:
     returns = data['Close'].pct_change().dropna()
     
     risk_metrics = {
-        'var': np.percentile(returns, 5) * 100,  # 95% VaR
-        'sharpe': (returns.mean() / returns.std()) * np.sqrt(252),  # Annualized Sharpe Ratio
+        'var': np.percentile(returns, 5) * 100,
+        'sharpe': (returns.mean() / returns.std()) * np.sqrt(252),
         'max_drawdown': ((data['Close'].cummax() - data['Close']) / data['Close'].cummax()).max() * 100
     }
     
