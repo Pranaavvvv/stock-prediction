@@ -43,16 +43,12 @@ class DataCache:
 
 data_cache = DataCache()
 
-# Custom exception classes
 class StockDataError(Exception):
-    """Exception raised for errors in stock data fetching."""
     pass
 
 class ModelError(Exception):
-    """Exception raised for errors in model operations."""
     pass
 
-# Enhanced UI components
 def create_custom_theme():
     st.markdown("""
         <style>
@@ -103,9 +99,6 @@ def create_custom_theme():
 
 @st.cache_data(ttl=3600)
 def get_stock_data(stock_symbol: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-    """
-    Fetch and process stock data with error handling and caching.
-    """
     try:
         cache_key = f"{stock_symbol}_{start_date}_{end_date}"
         cached_data = data_cache.get(cache_key)
@@ -115,50 +108,40 @@ def get_stock_data(stock_symbol: str, start_date: datetime, end_date: datetime) 
         
         data = yf.download(stock_symbol, start=start_date, end=end_date)
         
-        # Check if data is empty
         if data.empty:
             raise StockDataError(f"No data available for {stock_symbol}")
 
-        # Check for required columns
         required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
         if not all(col in data.columns for col in required_columns):
             raise StockDataError(f"Missing required columns for {stock_symbol}")
 
-        # Check for sufficient data points
-        if len(data) < 5:  # We need at least 200 data points for the 200-day moving average
+        if len(data) < 200:
             raise StockDataError(f"Insufficient data points for {stock_symbol}")
 
-        # Handle NaN values
         data = data.dropna()
         if data.empty:
             raise StockDataError(f"No valid data points after removing NaN values for {stock_symbol}")
         
-        # Calculate technical indicators
         data['50_MA'] = data['Close'].rolling(window=50).mean()
         data['200_MA'] = data['Close'].rolling(window=200).mean()
         
-        # RSI calculation
         delta = data['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         data['RSI'] = 100 - (100 / (1 + rs))
         
-        # MACD
         exp1 = data['Close'].ewm(span=12, adjust=False).mean()
         exp2 = data['Close'].ewm(span=26, adjust=False).mean()
         data['MACD'] = exp1 - exp2
         data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
         
-        # Additional indicators
         data['Volume_MA'] = data['Volume'].rolling(window=20).mean()
         data['ATR'] = ta.volatility.average_true_range(data['High'], data['Low'], data['Close'])
         
-        # Bollinger Bands
         data['Bollinger_High'] = data['Close'].rolling(window=20).mean() + (data['Close'].rolling(window=20).std() * 2)
         data['Bollinger_Low'] = data['Close'].rolling(window=20).mean() - (data['Close'].rolling(window=20).std() * 2)
         
-        # Price momentum features
         data['Close_Lag1'] = data['Close'].shift(1)
         data['Close_Lag2'] = data['Close'].shift(2)
         data['Daily_Return'] = data['Close'].pct_change()
@@ -174,9 +157,6 @@ def get_stock_data(stock_symbol: str, start_date: datetime, end_date: datetime) 
         raise StockDataError(f"Failed to fetch data for {stock_symbol}: {str(e)}")
 
 def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame] = None) -> go.Figure:
-    """
-    Create an enhanced interactive chart with improved styling and features.
-    """
     fig = make_subplots(
         rows=4, 
         cols=1, 
@@ -186,7 +166,6 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         row_heights=[0.4, 0.2, 0.2, 0.2]
     )
 
-    # Main price chart
     fig.add_trace(
         go.Candlestick(
             x=data.index,
@@ -201,7 +180,6 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         row=1, col=1
     )
 
-    # Moving averages
     fig.add_trace(
         go.Scatter(
             x=data.index,
@@ -222,7 +200,6 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         row=1, col=1
     )
 
-    # Bollinger Bands
     fig.add_trace(
         go.Scatter(
             x=data.index,
@@ -244,7 +221,6 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         row=1, col=1
     )
 
-    # Volume chart
     colors = ['red' if close < open else 'green' 
               for close, open in zip(data['Close'], data['Open'])]
     
@@ -259,7 +235,6 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         row=2, col=1
     )
 
-    # Technical indicators
     fig.add_trace(
         go.Scatter(
             x=data.index,
@@ -270,11 +245,9 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         row=3, col=1
     )
 
-    # Add RSI reference lines
     fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
     fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
 
-    # MACD
     fig.add_trace(
         go.Scatter(
             x=data.index,
@@ -295,7 +268,6 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         row=4, col=1
     )
 
-    # Add predictions if available
     if predictions is not None:
         fig.add_trace(
             go.Scatter(
@@ -308,7 +280,6 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
             row=1, col=1
         )
 
-    # Update layout
     fig.update_layout(
         height=1200,
         template='plotly_dark',
@@ -331,20 +302,15 @@ def create_enhanced_chart(data: pd.DataFrame, predictions: Optional[pd.DataFrame
         margin=dict(t=130, l=60, r=60, b=60)
     )
 
-    # Update axes
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
 
     return fig
 
 def display_enhanced_metrics(data: pd.DataFrame):
-    """
-    Display enhanced metrics with improved styling and additional information.
-    """
     with st.container():
         st.markdown('<div class="metric-container">', unsafe_allow_html=True)
         
-        # Price metrics
         col1, col2, col3, col4 = st.columns(4)
         
         current_price = data['Close'].iloc[-1]
@@ -360,7 +326,6 @@ def display_enhanced_metrics(data: pd.DataFrame):
                 delta_color="normal"
             )
         
-        # Technical indicators
         with col2:
             rsi = data['RSI'].iloc[-1]
             rsi_status = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
@@ -396,10 +361,6 @@ def display_enhanced_metrics(data: pd.DataFrame):
         st.markdown('</div>', unsafe_allow_html=True)
 
 def prepare_lstm_data(data: pd.DataFrame, lookback: int = 60) -> Tuple:
-    """
-    Prepare data for LSTM model with enhanced feature engineering.
-    
-    """
     try:
         features = [
             'Close', '50_MA', '200_MA', 'RSI', 'MACD', 'Signal_Line',
@@ -413,11 +374,10 @@ def prepare_lstm_data(data: pd.DataFrame, lookback: int = 60) -> Tuple:
         X, y = [], []
         for i in range(lookback, len(scaled_data)):
             X.append(scaled_data[i-lookback:i])
-            y.append(scaled_data[i, 0])  # Predicting the Close price
+            y.append(scaled_data[i, 0])
         
         X, y = np.array(X), np.array(y)
         
-        # Split data
         train_size = int(len(X) * 0.8)
         X_train = X[:train_size]
         X_test = X[train_size:]
@@ -431,9 +391,6 @@ def prepare_lstm_data(data: pd.DataFrame, lookback: int = 60) -> Tuple:
         raise ModelError(f"Failed to prepare data: {str(e)}")
 
 def build_enhanced_lstm_model(input_shape: Tuple[int, int]) -> Sequential:
-    """
-    Build an enhanced LSTM model with improved architecture.
-    """
     try:
         model = Sequential([
             LSTM(128, return_sequences=True, input_shape=input_shape),
@@ -467,9 +424,6 @@ def predict_future_prices(
     prediction_days: int,
     lookback: int = 60
 ) -> np.ndarray:
-    """
-    Predict future prices with enhanced error handling.
-    """
     try:
         last_sequence = data[['Close', '50_MA', '200_MA', 'RSI', 'MACD', 
                             'Signal_Line', 'Volume_MA', 'ATR', 'Bollinger_High',
@@ -480,20 +434,15 @@ def predict_future_prices(
         current_sequence = last_sequence.copy()
         
         for _ in range(prediction_days):
-            # Scale current sequence
             scaled_sequence = scaler.transform(current_sequence)
-            # Reshape for prediction
             sequence_3d = np.reshape(scaled_sequence, (1, lookback, scaled_sequence.shape[1]))
-            # Predict next price
             next_pred = model.predict(sequence_3d, verbose=0)
-            # Inverse transform prediction
             next_pred_full = np.zeros((1, scaler.n_features_in_))
             next_pred_full[0, 0] = next_pred[0, 0]
             next_pred_price = scaler.inverse_transform(next_pred_full)[0, 0]
             
             future_predictions.append(next_pred_price)
             
-            # Update sequence
             current_sequence = np.roll(current_sequence, -1, axis=0)
             current_sequence[-1] = [next_pred_price] + [np.nan] * (current_sequence.shape[1] - 1)
         
@@ -504,9 +453,6 @@ def predict_future_prices(
         raise ModelError(f"Failed to predict future prices: {str(e)}")
 
 def display_model_metrics(y_true: np.ndarray, y_pred: np.ndarray):
-    """
-    Display enhanced model performance metrics.
-    """
     st.subheader("Model Performance Metrics")
     
     with st.container():
@@ -531,15 +477,11 @@ def display_model_metrics(y_true: np.ndarray, y_pred: np.ndarray):
         st.markdown('</div>', unsafe_allow_html=True)
 
 def generate_trading_signals(data: pd.DataFrame) -> Dict[str, Dict[str, str]]:
-    """
-    Generate trading signals based on technical indicators.
-    """
     signals = {
         'technical': {},
         'trend': {}
     }
     
-    # RSI signals
     rsi = data['RSI'].iloc[-1]
     if rsi > 70:
         signals['technical']['RSI'] = 'Overbought'
@@ -548,7 +490,6 @@ def generate_trading_signals(data: pd.DataFrame) -> Dict[str, Dict[str, str]]:
     else:
         signals['technical']['RSI'] = 'Neutral'
     
-    # MACD signals
     macd = data['MACD'].iloc[-1]
     signal = data['Signal_Line'].iloc[-1]
     if macd > signal:
@@ -556,7 +497,6 @@ def generate_trading_signals(data: pd.DataFrame) -> Dict[str, Dict[str, str]]:
     else:
         signals['technical']['MACD'] = 'Bearish'
     
-    # Moving Average signals
     current_price = data['Close'].iloc[-1]
     ma_50 = data['50_MA'].iloc[-1]
     ma_200 = data['200_MA'].iloc[-1]
@@ -572,7 +512,6 @@ def generate_trading_signals(data: pd.DataFrame) -> Dict[str, Dict[str, str]]:
     else:
         signals['trend']['Moving Averages'] = 'Neutral'
     
-    # Bollinger Bands signals
     upper_bb = data['Bollinger_High'].iloc[-1]
     lower_bb = data['Bollinger_Low'].iloc[-1]
     
@@ -586,15 +525,11 @@ def generate_trading_signals(data: pd.DataFrame) -> Dict[str, Dict[str, str]]:
     return signals
 
 def display_trading_signals(data: pd.DataFrame):
-    """
-    Display trading signals based on technical indicators.
-    """
     st.subheader("Trading Signals Analysis")
     
     with st.container():
         st.markdown('<div class="metric-container">', unsafe_allow_html=True)
         
-        # Generate signals
         signals = generate_trading_signals(data)
         
         col1, col2 = st.columns(2)
@@ -612,9 +547,6 @@ def display_trading_signals(data: pd.DataFrame):
         st.markdown('</div>', unsafe_allow_html=True)
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, float]:
-    """
-    Calculate risk analysis metrics.
-    """
     returns = data['Close'].pct_change().dropna()
     
     risk_metrics = {
@@ -626,15 +558,11 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, float]:
     return risk_metrics
 
 def display_risk_analysis(data: pd.DataFrame):
-    """
-    Display risk analysis metrics.
-    """
     st.subheader("Risk Analysis")
     
     with st.container():
         st.markdown('<div class="metric-container">', unsafe_allow_html=True)
         
-        # Calculate risk metrics
         risk_metrics = calculate_risk_metrics(data)
         
         col1, col2, col3 = st.columns(3)
@@ -649,7 +577,6 @@ def display_risk_analysis(data: pd.DataFrame):
         st.markdown('</div>', unsafe_allow_html=True)
 
 def main():
-    # Page configuration
     st.set_page_config(
         page_title="Advanced Stock Analysis Dashboard",
         page_icon="📈",
@@ -657,14 +584,11 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    # Apply custom theme
     create_custom_theme()
     
-    # Header
     st.title("📈 Advanced Stock Analysis & Prediction Dashboard")
     st.markdown("---")
     
-    # Sidebar configuration
     with st.sidebar:
         st.header("Analysis Configuration")
         
@@ -698,21 +622,16 @@ def main():
     if analysis_button:
         try:
             with st.spinner("Fetching and analyzing stock data..."):
-                # Get stock data
                 data = get_stock_data(stock_symbol, date_range[0], date_range[1])
                 
-                # Display enhanced metrics
                 display_enhanced_metrics(data)
                 
-                # Prepare data for model
                 with st.spinner("Training prediction model..."):
                     try:
                         X_train, X_test, y_train, y_test, scaler = prepare_lstm_data(data)
                         
-                        # Build and train model
                         model = build_enhanced_lstm_model(X_train.shape[1:])
                         
-                        # Training progress bar
                         progress_bar = st.progress(0)
                         epochs = 50
                         
@@ -730,13 +649,11 @@ def main():
                             verbose=0
                         )
                         
-                        # Make predictions
                         test_predictions = model.predict(X_test)
                         future_predictions = predict_future_prices(
                             model, data, scaler, prediction_days
                         )
                         
-                        # Create prediction DataFrame
                         future_dates = pd.date_range(
                             start=data.index[-1] + pd.Timedelta(days=1),
                             periods=prediction_days
@@ -746,18 +663,14 @@ def main():
                             data={'Predictions': future_predictions}
                         )
                         
-                        # Display interactive chart
                         st.subheader("Technical Analysis & Predictions")
                         fig = create_enhanced_chart(data, predictions_df)
                         st.plotly_chart(fig, use_container_width=True)
                         
-                        # Model performance metrics
                         display_model_metrics(y_test, test_predictions)
                         
-                        # Display trading signals
                         display_trading_signals(data)
                         
-                        # Risk analysis
                         display_risk_analysis(data)
                         
                     except Exception as e:
@@ -770,4 +683,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
